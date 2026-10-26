@@ -1,0 +1,16 @@
+annotated-types==0.8.0
+anyio==4.15.1
+appdirs==1.4.4
+certifi==2026.10.23
+ecdsa==0.19.2
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.20
+ms_cv==0.1.1
+pydantic==2.14.1
+pydantic_core==2.50.1
+six==1.17.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+xbox-webapi==2.1.0
