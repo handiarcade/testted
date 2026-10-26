@@ -14,7 +14,7 @@ remplace les versions copiees dans la conversation. Ne pas melanger les versions
 - requirements.txt : versions des dependances installees par le BAT.
 - README.md : cette notice.
 
-Les cinq fichiers test_*.py sont optionnels pour l'utilisation, utiles pour verifier
+Les fichiers test_*.py sont optionnels pour l'utilisation, utiles pour verifier
 le programme. Aucun compte, mot de passe ou jeton n'est fourni dans cette archive.
 
 ## Demarrage Windows
@@ -96,9 +96,33 @@ Les portproxy existants ne sont pas modifies.
 ## Verification developpeur
 
 Avec les dependances installees :
-python -m unittest -v test_xbox test_notifications test_forced_source test_smartglass test_suite
+python -m unittest -v test_xbox test_notifications test_forced_source test_smartglass test_suite test_http_startup
 
 Les tests HTTP/DNS utilisent des serveurs locaux temporaires. Les tests SmartGlass
 utilisent des API simulees et un vrai callback HTTP local ; aucun compte reel et
 aucune console ne sont contactes. Les tests d'interface necessitent un ecran Tk.
 Sous Linux sans ecran, seuls ces quatre tests d'interface sont ignores.
+
+## Port HTTP 80 refuse au demarrage
+
+Si DNS demarre mais HTTP echoue, fermer l'application puis lancer
+Diagnostiquer_Port80.bat par clic droit > Executer en tant qu'administrateur.
+Conserver Diagnostiquer_Port80.ps1 a cote du BAT. Le rapport diagnostic_port80.txt
+indique les processus en ecoute, les exclusions de ports TCP, des informations
+HTTP.sys et le resultat de tests temporaires de liaison 80/8080. Aucun service
+n'est arrete et aucune reservation ni regle systeme n'est modifiee.
+Si une politique empeche le script PowerShell, le BAT produit un diagnostic CMD
+plus limite sans modifier cette politique.
+
+WinError 10013 peut venir d'une exclusion TCP, d'une liaison exclusive ou d'une
+restriction de securite. WinError 10048 indique une adresse ou un port occupe.
+Le nouveau message HTTP conserve le code et le texte de l'erreur d'origine.
+Les droits administrateur ne liberent pas un port deja occupe ou reserve.
+
+Le port 8080 sert seulement a comparer les restrictions : remplacer silencieusement
+80 par 8080 ne permettrait pas aux telechargements Xbox natifs de fonctionner,
+car une reponse DNS n'indique pas le port HTTP.
+
+Les scripts de diagnostic Windows doivent etre executes sur le PC concerne ;
+ils n'ont pas pu etre testes dans l'environnement Linux. Les tests Python
+reproduisent le refus d'acces et le conflit avec un vrai port local deja occupe.

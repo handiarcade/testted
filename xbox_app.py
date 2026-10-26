@@ -37,6 +37,7 @@ import subprocess
 import os
 import json
 import ctypes
+import errno
 import socket
 import mimetypes
 import urllib.request
@@ -103,6 +104,26 @@ def is_admin():
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:
         return False
+
+
+def describe_http_bind_error(port, error):
+    """Conserver l'erreur OS et distinguer conflit de port et refus d'acces."""
+    winerror = getattr(error, "winerror", None)
+    code = winerror if winerror is not None else getattr(error, "errno", None)
+    details = f"Port HTTP {port} indisponible : {error}"
+    if code is not None:
+        details += f" [code socket {code}]"
+    if code in (10048, errno.EADDRINUSE):
+        reason = "Le port est deja occupe par une autre application ou un service."
+    elif code == 10013:
+        reason = ("Windows refuse la liaison au port : reservation/exclusion TCP, "
+                  "service utilisant le port en exclusivite ou restriction de securite. "
+                  "Les droits administrateur ne suffisent pas toujours.")
+    elif isinstance(error, PermissionError) or code in (errno.EACCES, errno.EPERM):
+        reason = "Acces refuse : verifier les droits, les reservations et les restrictions reseau."
+    else:
+        reason = "Verifier la disponibilite et les restrictions du port sur ce PC."
+    return f"{details}\n{reason}\nLancez Diagnostiquer_Port80.bat et consultez diagnostic_port80.txt."
 
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -196,8 +217,8 @@ class XboxRedirectApp:
         self.refresh_mode()
         self.log("Pret. Choisis un mode, puis clique Activer.")
         self.log("Sur la Xbox : DNS manuel = IP de ce PC")
-        if not is_admin():
-            self.log("ATTENTION : lance l'appli en administrateur (ports 53/80, firewall).")
+        if os.name == "nt" and not is_admin():
+            self.log("Lancez l'application en administrateur pour configurer le pare-feu Windows.")
 
     # ---------- config ----------
     def load_config(self):
@@ -316,8 +337,7 @@ class XboxRedirectApp:
         if os.name == "nt" and not is_admin():
             messagebox.showwarning(
                 "Droits insuffisants",
-                "Lance l'appli en administrateur : sans ca, la regle firewall "
-                "et les ports 53/80 echoueront silencieusement."
+                "Relancez l'application en administrateur pour creer ses regles de pare-feu Windows."
             )
 
         self.save_config()
@@ -652,11 +672,8 @@ class XboxRedirectApp:
             self.log_threadsafe(f"Serveur HTTP en ecoute sur le port {HTTP_PORT}.")
             self.http_ready.set()
             self.server.serve_forever()
-        except PermissionError:
-            self.log_threadsafe(f"Port {HTTP_PORT} refuse : lance l'appli en ADMINISTRATEUR.")
         except OSError as e:
-            self.log_threadsafe(f"Port {HTTP_PORT} indisponible : {e} "
-                                f"(IIS / http.sys / un autre logiciel l'occupe ?)")
+            self.log_threadsafe(describe_http_bind_error(HTTP_PORT, e))
         except Exception as e:
             self.log_threadsafe(f"Erreur serveur HTTP : {e}")
         finally:

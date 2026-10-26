@@ -6,3 +6,4 @@ config.json
 config.json.tmp
 .local-data/
 smartglass_tokens.json
+diagnostic_port80.txt
