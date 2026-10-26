@@ -13,7 +13,7 @@ set "XBOX_LOG=%CD%\xbox_demarrage.log"
 >"%XBOX_LOG%" echo Demarrage Xbox Downloader et SmartGlass
 if errorlevel 1 goto journal_erreur
 
-for %%F in (xbox_suite.py xbox_app.py xbox_dns_spoof.py xbox_notifications.py xbox_smartglass.py requirements.txt) do if not exist "%%F" goto fichiers_absents
+for %%F in (xbox_suite.py xbox_app.py xbox_dns_spoof.py xbox_notifications.py xbox_smartglass.py xbox_devtools.py requirements.txt) do if not exist "%%F" goto fichiers_absents
 
 if exist ".venv\Scripts\python.exe" goto verifier_deps
 py -3.12 -c "import tkinter" >>"%XBOX_LOG%" 2>&1
@@ -60,7 +60,7 @@ goto rapport
 :fichiers_absents
 >>"%XBOX_LOG%" echo Fichiers manquants : extrayez TOUT le ZIP dans un dossier.
 >>"%XBOX_LOG%" echo Requis : xbox_suite.py, xbox_app.py, xbox_dns_spoof.py,
->>"%XBOX_LOG%" echo xbox_notifications.py, xbox_smartglass.py, requirements.txt.
+>>"%XBOX_LOG%" echo xbox_notifications.py, xbox_smartglass.py, xbox_devtools.py, requirements.txt.
 >>"%XBOX_LOG%" echo Verifiez les extensions .py et non .py.txt.
 goto rapport
 

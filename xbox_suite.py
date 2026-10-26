@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 
 from xbox_notifications import NotificationApp
 from xbox_smartglass import SmartglassClient
+from xbox_devtools import DevPortalWindow
 
 
 class SmartglassWindow(tk.Toplevel):
@@ -14,7 +15,7 @@ class SmartglassWindow(tk.Toplevel):
         super().__init__(application.root)
         self.application = application
         self.title('SmartGlass - applications Xbox')
-        self.geometry('720x390')
+        self.geometry('720x450')
         self.consoles = []
         self.apps = []
         ttk.Label(self, text='Connexion au compte Microsoft associe a votre Xbox.',
@@ -39,6 +40,8 @@ class SmartglassWindow(tk.Toplevel):
                   wraplength=680).pack(anchor='w', padx=12, pady=8)
         ttk.Label(self, text="Le lancement d'Edge n'ouvre pas automatiquement une URL.",
                   wraplength=680).pack(anchor='w', padx=12)
+        ttk.Button(self, text='Dossiers / applications du mode developpeur',
+                   command=application.open_devtools).pack(anchor='w', padx=12, pady=8)
 
     def connect(self):
         self.application.run_smartglass(
@@ -132,6 +135,7 @@ class XboxSuiteApp(NotificationApp):
         self.sg_target = None
         self.sg_busy = False
         self.sg_window = None
+        self.dev_window = None
         self._auto_target = None
         self._auto_sent = False
         self._auto_generation = 0
@@ -143,6 +147,12 @@ class XboxSuiteApp(NotificationApp):
             self.sg_window.lift()
         else:
             self.sg_window = SmartglassWindow(self)
+
+    def open_devtools(self):
+        if self.dev_window is not None and self.dev_window.winfo_exists():
+            self.dev_window.lift()
+        else:
+            self.dev_window = DevPortalWindow(self)
 
     def run_smartglass(self, label, operation, on_result):
         if self.sg_busy:

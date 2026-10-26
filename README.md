@@ -11,6 +11,7 @@ remplace les versions copiees dans la conversation. Ne pas melanger les versions
 - xbox_dns_spoof.py : DNS et relais.
 - xbox_notifications.py : detection des transferts, source directe, page message.
 - xbox_smartglass.py : connexion Microsoft et commandes SmartGlass.
+- xbox_devtools.py : acces au portail Xbox en mode developpeur.
 - requirements.txt : versions des dependances installees par le BAT.
 - README.md : cette notice.
 
@@ -96,12 +97,12 @@ Les portproxy existants ne sont pas modifies.
 ## Verification developpeur
 
 Avec les dependances installees :
-python -m unittest -v test_xbox test_notifications test_forced_source test_smartglass test_suite test_http_startup test_smartglass_api_compat
+python -m unittest -v test_xbox test_notifications test_forced_source test_smartglass test_suite test_http_startup test_smartglass_api_compat test_devtools
 
 Les tests HTTP/DNS utilisent des serveurs locaux temporaires. Les tests SmartGlass
 utilisent des API simulees et un vrai callback HTTP local ; aucun compte reel et
 aucune console ne sont contactes. Les tests d'interface necessitent un ecran Tk.
-Sous Linux sans ecran, seuls ces quatre tests d'interface sont ignores.
+Sous Linux sans ecran, seuls ces tests d'interface sont ignores.
 
 ## Port HTTP 80 refuse au demarrage
 
@@ -143,3 +144,38 @@ ou les valeurs contenues dans les reponses Microsoft.
 
 Si le probleme persiste, transmettre le nouveau message affiche dans l'application
 (aucun fichier de jetons n'est necessaire).
+
+## Dossiers et applications du mode developpeur
+
+Dans la fenetre SmartGlass, cliquer Dossiers / applications du mode developpeur.
+Cette fenetre n'exige pas de connexion Microsoft SmartGlass : elle ouvre le portail
+local de la console dans le navigateur du PC.
+
+1. Sur la Xbox, activer le mode developpeur et ouvrir Dev Home. Le changement depuis
+   le mode normal necessite un redemarrage.
+2. Dans Remote Access Settings, activer Xbox Device Portal et definir ses identifiants.
+3. Saisir dans l'outil l'IP, le nom reseau ou l'URL HTTPS affichee dans Dev Home.
+   Le port par defaut est 11443. Ne pas utiliser l'adresse du PC a la place de la Xbox.
+4. Le bouton de donnees ouvre le portail ; choisir File Explorer, puis le paquet
+   de l'application pour explorer les donnees accessibles de l'application sideloadee.
+5. Pour les applications dev : dans le portail, My games & apps > Actions > Launch.
+
+Le navigateur gere l'authentification et la confiance du certificat du portail.
+L'outil ne stocke pas ces identifiants et ne desactive aucune verification TLS.
+Il demande l'ouverture du portail, sans pretendre avoir confirme une connexion.
+
+SmartGlass en mode normal ne fournit ni l'exploration des dossiers proteges des
+applications retail ni le lancement direct d'un paquet installe seulement en mode dev.
+Les applications dev ne sont pas ajoutees artificiellement a la liste SmartGlass.
+
+Pour une application dont vous etes l'editeur, une version compatible Xbox peut
+eventuellement etre distribuee en mode normal via le Microsoft Store, y compris
+en audience privee pour des comptes de test. Cela requiert l'admissibilite Xbox,
+Partner Center et la certification : une copie du paquet dev ne suffit pas.
+Les package flights concernent une application deja publiee et compatible Xbox.
+Le type et les sources de Handiarcade restent necessaires pour evaluer cette voie.
+
+Sources Microsoft :
+- https://github.com/MicrosoftDocs/windows-dev-docs/blob/docs/uwp/debug-test-perf/device-portal.md
+- https://github.com/MicrosoftDocs/windows-dev-docs/blob/docs/hub/apps/publish/beta-testing-and-targeted-distribution.md
+- https://github.com/MicrosoftDocs/windows-dev-docs/blob/docs/uwp/apps-for-xbox/partner-center-xbox.md

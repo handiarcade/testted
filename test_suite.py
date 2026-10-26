@@ -57,6 +57,18 @@ class SuiteGUI(unittest.TestCase):
         self.assertIsNone(self.app.sg_target)
         self.assertEqual(window.apps, [])
 
+    def test_dev_portal_opens_only_the_configured_https_portal(self):
+        self.app.open_devtools()
+        window = self.app.dev_window
+        self.root.update()
+        self.assertTrue(window.winfo_exists())
+        window.address.set('192.0.2.5')
+        with patch('xbox_devtools.webbrowser.open', return_value=True) as browser:
+            window.open('files')
+        browser.assert_called_once_with('https://192.0.2.5:11443/')
+        self.assertIn('File Explorer', window.status.get())
+        self.assertIsNone(self.app.sg_target)
+
     def test_manual_launch_uses_selection_and_pending_stays_unconfirmed(self):
         window = self.select_app()
         self.app.smartglass.launch = AsyncMock(return_value=dict(status='pending', operation_id='operation'))
