@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import queue
 import secrets
+import ssl
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -20,6 +21,52 @@ import webbrowser
 
 class SmartglassError(RuntimeError):
     """Erreur affichable sans URL OAuth ni jeton."""
+
+
+def describe_service_error(error, stage):
+    """Classer une panne sans reproduire le contenu des reponses ou des jetons."""
+    import httpx
+    from pydantic import ValidationError
+    from xbox.webapi.common.exceptions import AuthenticationException
+
+    prefix = f"SmartGlass / {stage} : "
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    if isinstance(status, int) and 100 <= status <= 599:
+        message = prefix + f"le service Microsoft/Xbox a repondu HTTP {status}."
+        if status in (400, 401):
+            message += " Reconnectez votre compte Microsoft."
+        elif status == 403:
+            message += " Acces refuse par le service."
+        elif status == 429:
+            message += " Trop de requetes ; reessayez plus tard."
+        return message
+    if isinstance(error, AuthenticationException):
+        return prefix + "authentification Xbox/XSTS refusee. Reconnectez votre compte Microsoft."
+    if isinstance(error, ValidationError):
+        # Le texte complet d'une ValidationError peut contenir access_token.
+        issues = error.errors(include_input=False, include_url=False, include_context=False)
+        fields = []
+        for issue in issues[:8]:
+            location = issue.get('loc', ())
+            field = str(location[-1]) if location else '(racine)'
+            fields.append(field if field.isidentifier() and len(field) <= 48 else '(champ)')
+        return prefix + "format de reponse incompatible avec OpenXbox (champs : " + ', '.join(fields) + ")."
+    if isinstance(error, json.JSONDecodeError):
+        return prefix + "le service a retourne une reponse JSON illisible."
+    current = error
+    seen = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return prefix + "verification du certificat TLS refusee ; verifier la date du PC et les certificats Windows."
+        current = current.__cause__ or current.__context__
+    if isinstance(error, httpx.ProxyError):
+        return prefix + "connexion au proxy impossible (ProxyError)."
+    if isinstance(error, httpx.TimeoutException):
+        return prefix + "delai de connexion ou de reponse depasse (" + type(error).__name__ + ")."
+    if isinstance(error, httpx.RequestError):
+        return prefix + "requete reseau echouee (" + type(error).__name__ + ")."
+    return prefix + "erreur locale ou de compatibilite (" + type(error).__name__ + ")."
 
 
 def _default_token_path():
@@ -176,20 +223,27 @@ class SmartglassClient:
 
     @staticmethod
     def _check_status(response):
-        status = getattr(response, "status", None)
-        code = getattr(status, "error_code", None)
+        if isinstance(response, dict):
+            status = response.get("status")
+            code = status.get("errorCode") if isinstance(status, dict) else None
+        else:
+            status = getattr(response, "status", None)
+            code = getattr(status, "error_code", None)
         if code != "OK":
-            safe_code = code if isinstance(code, str) and code.isalnum() else "Unknown"
+            safe_code = code if isinstance(code, str) and code.isalnum() and len(code) <= 80 else "Unknown"
             raise SmartglassError(f"Le service Xbox a refuse l'operation : {safe_code}.")
 
-    async def _execute(self, operation, authenticate=False, on_auth_url=None):
-        lib = _library()
+    async def _execute(self, operation, authenticate=False, on_auth_url=None,
+                       stage="requete Xbox"):
+        phase = "initialisation OpenXbox"
         try:
+            lib = _library()
             async with lib.SignedSession() as session:
                 manager = lib.AuthenticationManager(
                     session, lib.CLIENT_ID, lib.CLIENT_SECRET, lib.REDIRECT_URI
                 )
                 have_tokens = False
+                phase = "lecture de la connexion locale"
                 if self.token_path.exists():
                     try:
                         if self.token_path.stat().st_size > 256 * 1024:
@@ -202,20 +256,25 @@ class SmartglassClient:
                         if not authenticate:
                             raise SmartglassError("Connexion locale illisible. Reconnectez le compte Microsoft.")
                 if have_tokens:
+                    phase = "renouvellement de la connexion Microsoft/Xbox"
                     try:
                         await manager.refresh_tokens()
                     except Exception as exc:
                         status = getattr(getattr(exc, "response", None), "status_code", None)
                         if not authenticate or status not in (400, 401):
                             raise
+                        phase = "connexion Microsoft/Xbox"
                         await self._interactive_login(manager, on_auth_url)
                 elif authenticate:
+                    phase = "connexion Microsoft/Xbox"
                     await self._interactive_login(manager, on_auth_url)
                 else:
                     raise SmartglassError("Connectez d'abord votre compte Microsoft avec le bouton Connexion.")
                 self._save_tokens(manager.oauth)
+                phase = "preparation du client Xbox"
                 client = lib.XboxLiveClient(manager)
                 try:
+                    phase = stage
                     return await operation(client.smartglass)
                 finally:
                     # Les requetes du fournisseur peuvent renouveler les jetons.
@@ -223,14 +282,7 @@ class SmartglassClient:
         except SmartglassError:
             raise
         except Exception as exc:
-            status = getattr(getattr(exc, "response", None), "status_code", None)
-            if status:
-                message = f"Connexion au service Xbox impossible (HTTP {status})."
-                if status in (400, 401):
-                    message += " Reconnectez votre compte Microsoft."
-            else:
-                message = "Connexion au service Xbox impossible. Verifiez Internet et les fonctions distantes."
-            raise SmartglassError(message) from exc
+            raise SmartglassError(describe_service_error(exc, phase)) from exc
 
     async def list_consoles(self, authenticate=True, on_auth_url=None):
         async def operation(provider):
@@ -242,20 +294,43 @@ class SmartglassClient:
                  "power_state": getattr(console.power_state, "value", console.power_state)}
                 for console in response.result
             ]
-        return await self._execute(operation, authenticate, on_auth_url)
+        return await self._execute(operation, authenticate, on_auth_url,
+                                   stage="liste des consoles")
 
     async def list_apps(self, device_id):
         if not isinstance(device_id, str) or not device_id.strip():
             raise SmartglassError("Selectionnez une console.")
         async def operation(provider):
-            response = await provider.get_installed_apps(device_id)
+            from pydantic import ValidationError
+            try:
+                response = await provider.get_installed_apps(device_id)
+            except ValidationError:
+                # Le modele SDK exige aussi des metadonnees d'installation dont
+                # nous n'avons pas besoin pour lancer une application.
+                response = await provider._fetch_list("installedApps", {"deviceId": device_id})
+                payload = response.json()
+                if not isinstance(payload, dict):
+                    raise SmartglassError("Liste des applications : reponse JSON de format inattendu.")
+                self._check_status(payload)
+                packages = payload.get("result")
+                if not isinstance(packages, list) or any(not isinstance(item, dict) for item in packages):
+                    raise SmartglassError("Liste des applications : champ result invalide.")
+                apps = []
+                for package in packages:
+                    product_id = package.get("oneStoreProductId")
+                    if not isinstance(product_id, str) or not product_id.strip():
+                        continue
+                    name = package.get("name")
+                    apps.append({"id": product_id,
+                                 "name": name if isinstance(name, str) and name else product_id})
+                return apps
             self._check_status(response)
             return [
                 {"id": package.one_store_product_id,
                  "name": package.name or package.one_store_product_id}
                 for package in response.result if package.one_store_product_id
             ]
-        return await self._execute(operation)
+        return await self._execute(operation, stage="chargement des applications")
 
     async def launch(self, device_id, product_id):
         if not isinstance(device_id, str) or not device_id.strip():
@@ -291,4 +366,4 @@ class SmartglassClient:
                         raise SmartglassError(f"La console n'a pas lance l'application ({status}).")
                 await asyncio.sleep(min(self.POLL_INTERVAL, max(0, deadline - loop.time())))
             return {"status": "pending", "operation_id": operation_id}
-        return await self._execute(operation)
+        return await self._execute(operation, stage="lancement de l'application")

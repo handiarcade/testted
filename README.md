@@ -96,7 +96,7 @@ Les portproxy existants ne sont pas modifies.
 ## Verification developpeur
 
 Avec les dependances installees :
-python -m unittest -v test_xbox test_notifications test_forced_source test_smartglass test_suite test_http_startup
+python -m unittest -v test_xbox test_notifications test_forced_source test_smartglass test_suite test_http_startup test_smartglass_api_compat
 
 Les tests HTTP/DNS utilisent des serveurs locaux temporaires. Les tests SmartGlass
 utilisent des API simulees et un vrai callback HTTP local ; aucun compte reel et
@@ -126,3 +126,20 @@ car une reponse DNS n'indique pas le port HTTP.
 Les scripts de diagnostic Windows doivent etre executes sur le PC concerne ;
 ils n'ont pas pu etre testes dans l'environnement Linux. Les tests Python
 reproduisent le refus d'acces et le conflit avec un vrai port local deja occupe.
+
+## Echec pendant Charger les applications installees
+
+La liste des consoles peut fonctionner alors que le modele de reponse des
+applications du SDK OpenXbox rejette des metadonnees d'installation absentes ou
+nulles. La lecture compatible conserve le statut du service et les identifiants
+Store, mais n'exige pas les metadonnees inutiles au lancement.
+Elle ne transforme pas un refus HTTP ou Xbox en succes. Les objets sans identifiant
+Store restent exclus de la selection.
+
+Le message d'erreur indique maintenant l'etape : connexion Microsoft/Xbox, liste
+des consoles, chargement des applications ou lancement. Les erreurs de format,
+reseau, proxy, delai et authentification sont distinguees sans afficher les jetons
+ou les valeurs contenues dans les reponses Microsoft.
+
+Si le probleme persiste, transmettre le nouveau message affiche dans l'application
+(aucun fichier de jetons n'est necessaire).
